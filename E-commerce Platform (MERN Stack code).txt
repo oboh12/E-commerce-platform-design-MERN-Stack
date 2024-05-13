@@ -1,0 +1,595 @@
+E-commeerce Platform
+
+Feature- User AAuthentication and Authorization:
+
+Backend(Node.js with Express MongoDB):
+1.Setup a newNode.js project and install necessary packages:
+
+mkdir ecommerce-backend
+cd ecommerce-backend
+npm init -y
+npm install express mongoose bcryptjs jsonwebtoken dotenv
+
+2.Create a 'server.js' file for Express server:
+
+// server.js
+const express = require('express');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error(err));
+
+// Define User schema
+const UserSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+});
+
+const User = mongoose.model('User', UserSchema);
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// Routes
+app.post('/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ email, password: hashedPassword });
+    await user.save();
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    // Create JWT token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    res.status(200).json({ token });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+3.Setup a '.env' file in your project directory and add the MongoDB URI and JWT secret:
+
+MONGODB_URI=your_mongodb_uri
+JWT_SECRET=your_secret
+
+Frontend(React.js):
+
+1.Setup a new React.js project
+
+npx create-react-app ecommerce-frontend
+cd ecommerce-frontend
+
+2. Install Axios for making HTTP requirements
+
+npm install axios
+
+3Modify 'axc/App.js' for the basic frontend
+
+// App.js
+import React, { useState } from 'react';
+import axios from 'axios';
+
+function App() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleRegister = async () => {
+    try {
+      await axios.post('/register', { email, password });
+      alert('User registered successfully');
+    } catch (error) {
+      console.error(error);
+      alert('Registration failed');
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const response = await axios.post('/login', { email, password });
+      const token = response.data.token;
+      localStorage.setItem('token', token);
+      alert('Login successful');
+    } catch (error) {
+      console.error(error);
+      alert('Login failed');
+    }
+  };
+
+  return (
+    <div>
+      <h1>E-commerce App</h1>
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+      />
+      <button onClick={handleRegister}>Register</button>
+      <button onClick={handleLogin}>Login</button>
+    </div>
+  );
+}
+
+export default App;
+
+4.Start the React development server:
+
+npm start
+
+Shopping Cart:
+
+Server-side(Node.js with Express.js)
+
+// server.js
+
+const express = require('express');
+const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Models
+const Product = require('./models/Product');
+
+app.use(cors());
+app.use(bodyParser.json());
+
+// Connect to MongoDB
+mongoose.connect('mongodb://localhost:27017/ecommerce', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => console.log('MongoDB connected'))
+  .catch(err => console.log(err));
+
+// Routes
+const productRoutes = require('./routes/productRoutes');
+app.use('/api/products', productRoutes);
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+Client-side(React.js):
+
+// components/ProductList.js
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const ProductList = () => {
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    axios.get('/api/products')
+      .then(res => {
+        setProducts(res.data);
+      })
+      .catch(err => console.log(err));
+  }, []);
+
+  return (
+    <div>
+      <h2>Products</h2>
+      {products.map(product => (
+        <div key={product._id}>
+          <h3>{product.name}</h3>
+          <p>${product.price}</p>
+          <button>Add to Cart</button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default ProductList;
+
+Order Management:
+
+Server-side
+
+// models/Order.js
+
+const mongoose = require('mongoose');
+
+const OrderSchema = new mongoose.Schema({
+  products: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product'
+  }],
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  total: Number,
+  status: {
+    type: String,
+    enum: ['Pending', 'Confirmed', 'Shipped', 'Delivered'],
+    default: 'Pending'
+  }
+}, { timestamps: true });
+
+module.exports = mongoose.model('Order', OrderSchema);
+
+Client-side
+
+// components/OrderList.js
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const OrderList = () => {
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    axios.get('/api/orders')
+      .then(res => {
+        setOrders(res.data);
+      })
+      .catch(err => console.log(err));
+  }, []);
+
+  return (
+    <div>
+      <h2>Order History</h2>
+      {orders.map(order => (
+        <div key={order._id}>
+          <h3>Order ID: {order._id}</h3>
+          <p>User: {order.user.username}</p>
+          <p>Total: ${order.total}</p>
+          <p>Status: {order.status}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default OrderList;
+
+Payment Integration:
+
+Backend(Node.js with Express.js)
+
+// server.js
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const { stripeSecretKey } = require('./config'); // Stripe secret key
+
+const app = express();
+
+// Middleware
+app.use(bodyParser.json());
+app.use(cors());
+
+// Connect to MongoDB
+mongoose.connect('mongodb://localhost/ecommerce', { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.log(err));
+
+// Routes
+app.use('/api/products', require('./routes/products'));
+app.use('/api/orders', require('./routes/orders'));
+app.use('/api/payment', require('./routes/payment'));
+
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+
+Shipping Integration:
+
+Backend(Node.js with Express.js)
+
+// server.js
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const { MONGODB_URI } = require('./config');
+const shippingRoutes = require('./routes/shipping');
+
+const app = express();
+
+// Middleware
+app.use(express.json());
+app.use(cors());
+
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error(err));
+
+// Routes
+app.use('/api/shipping', shippingRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something went wrong!');
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+
+// models/Shipping.js
+
+const mongoose = require('mongoose');
+
+const shippingSchema = new mongoose.Schema({
+    method: {
+        type: String,
+        required: true
+    },
+    price: {
+        type: Number,
+        required: true
+    }
+});
+
+module.exports = mongoose.model('Shipping', shippingSchema);
+
+// routes/shipping.js
+
+const express = require('express');
+const router = express.Router();
+const Shipping = require('../models/Shipping');
+
+// Get all shipping methods
+router.get('/', async (req, res) => {
+    try {
+        const shippingMethods = await Shipping.find();
+        res.json(shippingMethods);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+module.exports = router;
+
+Frontend(React.js)
+
+// App.js
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+function App() {
+    const [shippingMethods, setShippingMethods] = useState([]);
+    const [selectedShippingMethod, setSelectedShippingMethod] = useState(null);
+
+    useEffect(() => {
+        fetchShippingMethods();
+    }, []);
+
+    const fetchShippingMethods = async () => {
+        try {
+            const response = await axios.get('/api/shipping');
+            setShippingMethods(response.data);
+        } catch (error) {
+            console.error('Error fetching shipping methods:', error);
+        }
+    };
+
+    const handleShippingMethodSelect = (method) => {
+        setSelectedShippingMethod(method);
+    };
+
+    return (
+        <div>
+            <h1>E-commerce Store</h1>
+            <div>
+                <h2>Shipping Methods</h2>
+                <ul>
+                    {shippingMethods.map(method => (
+                        <li key={method._id} onClick={() => handleShippingMethodSelect(method)}>
+                            {method.method} - ${method.price}
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {selectedShippingMethod && (
+                <div>
+                    <h2>Selected Shipping Method</h2>
+                    <p>{selectedShippingMethod.method} - ${selectedShippingMethod.price}</p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default App;
+
+Security Measures:
+
+Backend(Node.js with Express.js)
+
+// server.js
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const session = require('express-session');
+const MongoDBStore = require('connect-mongodb-session')(session);
+const csrf = require('csurf');
+const { MONGODB_URI, SESSION_SECRET } = require('./config');
+
+const app = express();
+
+// Helmet middleware for setting HTTP headers
+app.use(helmet());
+
+// Rate limiting middleware
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
+
+// Session store
+const store = new MongoDBStore({
+    uri: MONGODB_URI,
+    collection: 'sessions'
+});
+
+// Session middleware
+app.use(session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: store,
+    cookie: {
+        maxAge: 3600000, // 1 hour
+        secure: true, // send cookie over HTTPS only
+        httpOnly: true // cookie inaccessible to JavaScript
+    }
+}));
+
+// CSRF protection
+app.use(csrf());
+
+// Middleware to set CSRF token in response headers
+app.use((req, res, next) => {
+    res.setHeader('X-CSRF-Token', req.csrfToken());
+    next();
+});
+
+// MongoDB connection
+mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('MongoDB Connected'))
+    .catch(err => console.error(err));
+
+// CORS middleware
+app.use(cors());
+
+// Routes
+app.use('/api/products', require('./routes/products'));
+app.use('/api/orders', require('./routes/orders'));
+app.use('/api/payment', require('./routes/payment'));
+app.use('/api/auth', require('./routes/auth'));
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something went wrong!');
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+
+Frontend(React.js)
+
+// App.js
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+function App() {
+    const [products, setProducts] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [amount, setAmount] = useState(0);
+    const [stripeToken, setStripeToken] = useState(null);
+
+    useEffect(() => {
+        fetchProducts();
+    }, []);
+
+    const fetchProducts = async () => {
+        try {
+            const response = await axios.get('/api/products');
+            setProducts(response.data);
+        } catch (error) {
+            console.error('Error fetching products:', error);
+        }
+    };
+
+    const handleProductSelect = (product) => {
+        setSelectedProduct(product);
+    };
+
+    const handlePayment = async () => {
+        try {
+            const response = await axios.post('/api/payment', { amount, token: stripeToken });
+            console.log('Payment successful:', response.data);
+        } catch (error) {
+            console.error('Error processing payment:', error);
+        }
+    };
+
+    return (
+        <div>
+            <h1>E-commerce Store</h1>
+            <div>
+                <h2>Products</h2>
+                <ul>
+                    {products.map(product => (
+                        <li key={product._id} onClick={() => handleProductSelect(product)}>
+                            {product.name} - ${product.price}
+                        </li>
+                    ))}
+                </ul>
+            </div>
+            {selectedProduct && (
+                <div>
+                    <h2>Selected Product</h2>
+                    <p>{selectedProduct.name} - ${selectedProduct.price}</p>
+                    <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                    <button onClick={handlePayment}>Pay Now</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default App;
+
+
+
+
+
+
+
+
